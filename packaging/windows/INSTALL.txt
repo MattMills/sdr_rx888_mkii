@@ -1,0 +1,67 @@
+RX888 mkII source module for SDR++ (Windows x64)
+================================================
+
+Contents
+  modules\rx888_mkii_source.dll   the SDR++ plugin
+  rx888_tool.exe                  command line test tool (optional)
+  BUILD_INFO.txt                  plugin and SDR++ versions this was built from
+
+This build only works with an SDR++ build from (about) the same SDR++ commit
+as listed in BUILD_INFO.txt, e.g. the SDR++ nightly from the same days.
+
+
+1. Install the USB driver (once per PC, needs administrator rights)
+-------------------------------------------------------------------
+Windows has no driver for the RX888's USB controller (Cypress FX3). Install
+the WinUSB driver with Zadig for BOTH USB IDs it uses:
+
+  04B4:00F3  FX3 boot loader ("WestBridge"), what you see after plugging in
+  04B4:00F1  RX888 running its firmware ("RX888mk2"), after SDR++ loads it
+
+a) Download Zadig from https://zadig.akeo.ie/ and run it (accept the UAC prompt).
+b) Plug in the RX888 and wait a few seconds.
+c) Options -> List All Devices.
+d) Choose "WestBridge" in the drop-down. The USB ID field must read 04B4 00F3.
+e) Select "WinUSB" as the target driver and click "Install Driver"
+   (or "Replace Driver"). Wait for "The driver was installed successfully".
+f) Device -> Create New Device. Enter the name "RX888mk2", USB ID 04B4 and 00F1
+   (leave the third box empty), select WinUSB and click "Install Driver".
+   This pre-installs the driver for the device the RX888 becomes once SDR++
+   has loaded its firmware.
+
+   If you skip f): start SDR++ once with the RX888 selected (step 3); it will
+   report that the device has no driver. Then run Zadig again, Options -> List
+   All Devices, choose "RX888mk2" (04B4 00F1), WinUSB, Install Driver.
+
+Device Manager should then show "WestBridge" or "RX888mk2" under
+"Universal Serial Bus devices" without a warning sign. If the RX888 was used
+with ExtIO_sddc/HDSDR before, its 04B4:00F1 device may be bound to the Cypress
+CyUSB3 driver; replace that with WinUSB the same way (this breaks ExtIO_sddc
+until you switch back).
+
+
+2. Install the plugin
+---------------------
+Copy modules\rx888_mkii_source.dll into the "modules" folder of your SDR++
+installation (next to the other *_source.dll files). SDR++ already ships the
+libusb-1.0.dll and volk.dll the plugin needs.
+
+Start SDR++, open "Module Manager" in the menu, pick "rx888_mkii_source" in
+the module list, type a name (e.g. "RX888 mkII") and click "+".
+Then choose "RX888 mkII" in the Source menu.
+
+
+3. Use it
+---------
+- The first start uploads the firmware (about 2 s); this happens again every
+  time the receiver is plugged in.
+- Input: "HF (direct sampling)" uses the HF antenna port, "VHF/UHF (R828D
+  tuner)" the VHF port.
+- ADC clock: 16 or 20 MS/s on a USB 2.0 connection; 32/64/128 MS/s need USB 3
+  (the module shows the measured USB sample rate - if it is below the ADC
+  clock, samples are being lost).
+- Watch "ADC peak": if it says CLIPPING, add RF attenuation or reduce gain.
+- Freq. corr. (ppb): crystal correction in parts per billion.
+
+rx888_tool.exe needs libusb-1.0.dll: run it from the SDR++ folder (copy it
+there) - see README.md for its commands (list, info, stream, capture, scan).
