@@ -46,9 +46,10 @@ Copy modules\rx888_mkii_source.dll into the "modules" folder of your SDR++
 installation (next to the other *_source.dll files). SDR++ already ships the
 libusb-1.0.dll and volk.dll the plugin needs.
 
-Start SDR++, open "Module Manager" in the menu, pick "rx888_mkii_source" in
-the module list, type a name (e.g. "RX888 mkII") and click "+".
-Then choose "RX888 mkII" in the Source menu.
+Start SDR++ and choose "RX888 mkII" in the Source menu. On first start the
+plugin adds its own "RX888 mkII Source" entry to SDR++'s module list, so no
+Module Manager step is needed. To hide it, disable that entry in Module
+Manager (a deleted entry is re-added on the next start).
 
 
 3. Use it

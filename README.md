@@ -116,9 +116,11 @@ package built against an SDR++ version close to yours.
    replace it with WinUSB the same way.
 2. Copy `modules\rx888_mkii_source.dll` from the release zip into the
    `modules` folder of SDR++.
-3. Start SDR++, open **Module Manager**, select `rx888_mkii_source`, enter a
-   name (e.g. `RX888 mkII`) and click **+**. Choose **RX888 mkII** in the
-   Source menu.
+3. Start SDR++ and choose **RX888 mkII** in the Source menu. SDR++ only
+   creates the module instances listed in its `config.json`, so on first start
+   the plugin adds an `RX888 mkII Source` instance there itself; no Module
+   Manager step is needed. To hide it, disable that instance in Module Manager
+   (a deleted instance is re-added on the next start).
 
 ### Linux (Debian/Ubuntu)
 
@@ -128,14 +130,13 @@ sudo apt install ./rx888_mkii_source_<distro>_<arch>.deb
 
 The package installs the plugin to `/usr/lib/sdrpp/plugins`, `rx888_tool` to
 `/usr/bin` and a udev rule giving the logged-in user access to the receiver
-(replug it after installing). Then add the module in SDR++'s Module Manager as
-above.
+(replug it after installing).
 
 ### macOS
 
 See `INSTALL.txt` in the macOS zip: copy the plugin into
 `SDR++.app/Contents/Plugins`, its libraries into `Contents/Frameworks`,
-re-sign the app ad hoc and add the module in the Module Manager.
+and re-sign the app ad hoc.
 
 ## Using the module
 
@@ -215,7 +216,12 @@ cmake --build build --config Release
 `scripts\make_sdrpp_bundle.ps1` assembles a runnable SDR++ folder (SDR++
 build + DLLs + this plugin), e.g.
 `.\scripts\make_sdrpp_bundle.ps1 -SdrppSource C:\dev\SDRPlusPlus -SdrppBuild C:\dev\SDRPlusPlus\build -VcpkgInstalled C:\dev\vcpkg\installed\x64-windows -VolkBin C:\dev\install\bin -Out C:\dev\sdrpp_rx888`,
-then run `C:\dev\sdrpp_rx888\sdrpp.exe -r C:\dev\sdrpp_rx888`.
+then run `C:\dev\sdrpp_rx888\sdrpp.exe` (or `sdrpp.exe -r C:\dev\sdrpp_rx888` from any
+directory). The script writes `config.json` with absolute module and resource
+paths and an RX888 mkII instance. It does this because SDR++'s Windows defaults are
+relative to the working directory and do not list this plugin. Close SDR++ normally:
+killing it while it saves can leave `config.json` empty, and SDR++ then falls back
+to those defaults. Re-run the script to repair it.
 
 ### Linux
 

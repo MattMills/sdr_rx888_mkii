@@ -680,6 +680,30 @@ MOD_EXPORT void _INIT_() {
     config.setPath(core::args["root"].s() + "/rx888_mkii_config.json");
     config.load(def);
     config.enableAutoSave();
+
+    // SDR++ loads every DLL in modules/ but only creates the instances listed in its
+    // config.json, and its default list knows nothing of out-of-tree modules: dropping this
+    // DLL in alone would show no source. _INIT_ runs before the instances are created, so
+    // add one when no instance of this module exists. To hide it, disable it in Module Manager.
+    core::configManager.acquire();
+    const std::string modName = _INFO_.name;
+    json& instances = core::configManager.conf["moduleInstances"];
+    bool present = false;
+    for (auto& [name, inst] : instances.items()) {
+        if ((inst.is_object() && inst.value("module", "") == modName) ||
+            (inst.is_string() && inst.get<std::string>() == modName)) {
+            present = true;
+            break;
+        }
+    }
+    if (!present) {
+        std::string name = "RX888 mkII Source";
+        for (int n = 2; instances.contains(name); n++) { name = "RX888 mkII Source " + std::to_string(n); }
+        instances[name]["module"] = modName;
+        instances[name]["enabled"] = true;
+        flog::info("RX888: added module instance '{0}'", name);
+    }
+    core::configManager.release(!present);
 }
 
 MOD_EXPORT ModuleManager::Instance* _CREATE_INSTANCE_(std::string name) {
