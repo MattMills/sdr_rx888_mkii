@@ -10,7 +10,7 @@ name: Build
 
 on:
   push:
-    branches: ['**']
+    branches: [master]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -196,6 +196,13 @@ jobs:
     steps:
       - name: Install dependencies
         run: |
+          if [ "${{ matrix.distro }}" = "debian_bullseye" ]; then
+            # Debian 11 is end-of-life: its packages moved to archive.debian.org.
+            sed -i -e 's|http://deb.debian.org/debian-security|http://archive.debian.org/debian-security|g' \
+                   -e 's|http://deb.debian.org/debian|http://archive.debian.org/debian|g' \
+                   -e '/bullseye-updates/d' /etc/apt/sources.list
+            echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99archive
+          fi
           apt-get update
           apt-get install -y build-essential cmake git pkg-config libfftw3-dev libglfw3-dev ${{ matrix.volk }} \
             libzstd-dev libusb-1.0-0-dev dpkg-dev file
