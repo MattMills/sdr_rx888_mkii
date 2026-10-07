@@ -1,0 +1,22 @@
+RX888 mkII source module for SDR++ (macOS)
+==========================================
+
+This build only works with an SDR++.app built from (about) the same SDR++
+commit as listed in BUILD_INFO.txt, e.g. the SDR++ nightly from the same days.
+
+1. Copy Contents/Plugins/rx888_mkii_source.dylib into
+   SDR++.app/Contents/Plugins/
+2. Copy every file from Contents/Frameworks/ into
+   SDR++.app/Contents/Frameworks/ that is not already there
+   (keep SDR++'s own copies when asked).
+3. Re-sign the modified app and clear the download quarantine:
+     codesign --force --deep -s - /Applications/SDR++.app
+     xattr -dr com.apple.quarantine /Applications/SDR++.app
+4. Start SDR++, open "Module Manager", pick "rx888_mkii_source", enter a name
+   (e.g. "RX888 mkII"), click "+", then select "RX888 mkII" as the source.
+
+No driver is needed on macOS. The RX888 must be on a USB 3 port for ADC clocks
+above ~20 MS/s.
+
+rx888_tool (command line test tool) needs libusb and fftw from Homebrew:
+  brew install libusb fftw

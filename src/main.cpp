@@ -161,6 +161,13 @@ private:
         if (model != MODEL_RX888R2) {
             flog::warn("RX888: device reports model {} ({}), this module targets the RX888 mkII", (int)model, modelName(model));
         }
+        if (fwVersion != 0x0202) {
+            // A different SDDC firmware was loaded by other software; unplug
+            // the receiver to return it to the bootloader so ours is loaded.
+            char ver[16];
+            snprintf(ver, sizeof(ver), "%d.%02d", fwVersion >> 8, fwVersion & 0xFF);
+            flog::warn("RX888: firmware {} is running, this module was tested with 2.02", std::string(ver));
+        }
 
         selectedPath = p;
         devId = devices.keyId(p);
@@ -237,10 +244,18 @@ private:
         sampleRate = outRates.value(rateId);
     }
 
+    // Output rate in the corrected frequency frame: the Si5351 synthesis error
+    // and the ppb correction scale the real ADC clock. Giving SDR++ this rate
+    // (instead of the round nominal one) keeps its frequency axis exact away
+    // from the centre too.
+    double effectiveRate() const {
+        return RX888mk2::si5351OutputHz(adcRate) * (1.0 + ppb * 1e-9) / (double)(2 << decim);
+    }
+
     // ------------------------------------------------------------ handlers
     static void menuSelected(void* ctx) {
         RX888SourceModule* _this = (RX888SourceModule*)ctx;
-        core::setInputSampleRate(_this->sampleRate);
+        core::setInputSampleRate(_this->effectiveRate());
         flog::info("RX888SourceModule '{}': Menu Select!", _this->name);
     }
 
@@ -279,6 +294,11 @@ private:
         r.setInput(_this->input);
         _this->applyAllControls();
 
+        // One core keeps up with 128 MS/s when FFTW has SIMD; extra threads
+        // leave headroom for SDR++ itself at the high clocks.
+        int hw = (int)std::thread::hardware_concurrency();
+        int threads = _this->adcRate >= 100000000 ? 3 : (_this->adcRate >= 50000000 ? 2 : 1);
+        _this->r2iq.setThreads(std::clamp(threads, 1, std::max(1, hw / 2)));
         _this->r2iq.configure(_this->decim);
         _this->r2iq.reset();
         _this->r2iq.setDcRemoval(_this->dcRemoval);
@@ -336,7 +356,7 @@ private:
     void restartIfRunning(bool rateChanged) {
         bool wasRunning = running;
         if (wasRunning) { stop(this); }
-        if (rateChanged) { core::setInputSampleRate(sampleRate); }
+        if (rateChanged) { core::setInputSampleRate(effectiveRate()); }
         if (wasRunning) { start(this); }
     }
 
@@ -408,7 +428,7 @@ private:
             bool wasRunning = _this->running;
             if (wasRunning) { stop(_this); }
             _this->selectDevice(_this->devices.key(_this->devId));
-            core::setInputSampleRate(_this->sampleRate);
+            core::setInputSampleRate(_this->effectiveRate());
             if (wasRunning) { start(_this); }
         }
         SmGui::FillWidth();
@@ -417,7 +437,7 @@ private:
             if (!_this->running) {
                 _this->refresh();
                 _this->selectDevice(_this->selectedPath);
-                core::setInputSampleRate(_this->sampleRate);
+                core::setInputSampleRate(_this->effectiveRate());
             }
         }
 
@@ -566,6 +586,7 @@ private:
         if (SmGui::InputInt(CONCAT("##_rx888_ppb_", n), &_this->ppb, 100, 1000)) {
             _this->ppb = std::clamp(_this->ppb, -200000, 200000);
             _this->save("ppb", _this->ppb);
+            core::setInputSampleRate(_this->effectiveRate());
             if (live) { _this->applyTuning(); }
         }
 

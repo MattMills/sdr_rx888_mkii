@@ -1,0 +1,265 @@
+name: Build
+
+# Builds the plugin against SDR++ for the same targets as the SDR++ nightly
+# (Windows x64, macOS Intel/ARM, Debian and Ubuntu amd64/aarch64), runs the
+# DSP self-test and packages it. Pushing a tag "v*" publishes a GitHub release.
+#
+# SDR++ modules are C++ and not ABI-stable across SDR++ versions: each package
+# works with SDR++ builds from (about) the SDR++ commit it was built against,
+# which is recorded in BUILD_INFO.txt inside every package.
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      sdrpp_ref:
+        description: SDR++ git ref (branch, tag or commit) to build against
+        required: false
+        default: master
+
+permissions:
+  contents: read
+
+env:
+  SDRPP_REPO: AlexandreRouma/SDRPlusPlus
+  SDRPP_REF: ${{ github.event.inputs.sdrpp_ref || 'master' }}
+  # SDR++ options with external dependencies, disabled: only sdrpp_core is built.
+  SDRPP_CORE_OPTS: >-
+    -DOPT_BUILD_AIRSPY_SOURCE=OFF -DOPT_BUILD_AIRSPYHF_SOURCE=OFF -DOPT_BUILD_AUDIO_SOURCE=OFF
+    -DOPT_BUILD_HACKRF_SOURCE=OFF -DOPT_BUILD_PLUTOSDR_SOURCE=OFF -DOPT_BUILD_RTL_SDR_SOURCE=OFF
+    -DOPT_BUILD_AUDIO_SINK=OFF -DOPT_BUILD_DISCORD_PRESENCE=OFF
+
+jobs:
+  windows:
+    name: Windows x64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+          fetch-depth: 0
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.SDRPP_REPO }}
+          ref: ${{ env.SDRPP_REF }}
+          path: sdrpp
+
+      # Same volk and libusb as the official SDR++ Windows package (PothosSDR,
+      # libusb patched to 1.0.23), so the plugin's imports match the DLLs that
+      # SDR++ ships.
+      - name: Install PothosSDR (volk, libusb)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://downloads.myriadrf.org/builds/PothosSDR/PothosSDR-2020.01.26-vc14-x64.exe" -OutFile pothos.exe
+          New-Item -ItemType Directory -Force "C:/Program Files/PothosSDR" | Out-Null
+          7z x pothos.exe -o"C:/Program Files/PothosSDR/" | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/libusb/libusb/releases/download/v1.0.23/libusb-1.0.23.7z" -OutFile libusb.7z
+          7z x libusb.7z -olibusb_old | Out-Null
+          Copy-Item -Force libusb_old/MS64/dll/libusb-1.0.dll "C:/Program Files/PothosSDR/bin/"
+          Copy-Item -Force libusb_old/MS64/dll/libusb-1.0.lib "C:/Program Files/PothosSDR/lib/"
+
+      # Shared fftw3/glfw3/zstd for the SDR++ core (as SDR++ CI); a static
+      # AVX2 FFTW is linked into the plugin itself, since the fftw3f.dll that
+      # SDR++ ships is built without SIMD.
+      - name: Install vcpkg dependencies
+        shell: pwsh
+        run: |
+          vcpkg install fftw3:x64-windows glfw3:x64-windows zstd:x64-windows
+          vcpkg install "fftw3[avx2]:x64-windows-static-md"
+
+      - name: Build SDR++ core
+        shell: pwsh
+        run: |
+          $tc = "$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          cmake -S sdrpp -B sdrpp/build -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release "-DCMAKE_TOOLCHAIN_FILE=$tc" $env:SDRPP_CORE_OPTS.Split(" ")
+          cmake --build sdrpp/build --config Release --target sdrpp_core
+
+      - name: Build plugin
+        shell: pwsh
+        run: |
+          $tc = "$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          cmake -S plugin -B plugin/build -G "Visual Studio 17 2022" -A x64 "-DCMAKE_TOOLCHAIN_FILE=$tc" `
+            "-DSDRPP_SOURCE_DIR=$pwd/sdrpp" "-DSDRPP_BUILD_DIR=$pwd/sdrpp/build" `
+            "-DCMAKE_PREFIX_PATH=C:/Program Files/PothosSDR" `
+            "-DFFTW3f_DIR=$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows-static-md/share/fftw3f"
+          cmake --build plugin/build --config Release
+
+      - name: DSP self-test
+        shell: pwsh
+        run: |
+          $env:PATH = "C:/Program Files/PothosSDR/bin;" + $env:PATH
+          plugin/build/Release/rx888_tool.exe selftest
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $pkg = "rx888_mkii_source_windows_x64"
+          New-Item -ItemType Directory -Force "$pkg/modules" | Out-Null
+          Copy-Item plugin/build/Release/rx888_mkii_source.dll "$pkg/modules/"
+          Copy-Item plugin/build/Release/rx888_tool.exe "$pkg/"
+          Copy-Item plugin/packaging/windows/INSTALL.txt, plugin/README.md, plugin/LICENSE, plugin/THIRD_PARTY_NOTICES.md "$pkg/"
+          $ver = git -C plugin describe --tags --always --dirty
+          $sdrpp = git -C sdrpp rev-parse HEAD
+          "rx888_mkii_source $ver`nBuilt against SDR++ $env:SDRPP_REPO@$sdrpp ($env:SDRPP_REF)`nTarget: windows_x64`nBuilt: $(Get-Date -Format u)" | Out-File -Encoding utf8 "$pkg/BUILD_INFO.txt"
+          $dumpbin = Get-ChildItem "C:/Program Files/Microsoft Visual Studio" -Recurse -Filter dumpbin.exe -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match "Hostx64\\x64" } | Select-Object -First 1
+          if ($dumpbin) { & $dumpbin.FullName /dependents "$pkg/modules/rx888_mkii_source.dll" }
+          Compress-Archive -Path "$pkg/*" -DestinationPath "$pkg.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rx888_mkii_source_windows_x64
+          path: rx888_mkii_source_windows_x64.zip
+
+  macos:
+    name: macOS ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: intel, runner: macos-15-intel }
+          - { name: arm, runner: macos-15 }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+          fetch-depth: 0
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.SDRPP_REPO }}
+          ref: ${{ env.SDRPP_REF }}
+          path: sdrpp
+
+      - name: Install dependencies
+        run: |
+          brew install pkg-config libusb fftw glfw zstd
+          pip3 install mako --break-system-packages
+          git clone --recursive https://github.com/gnuradio/volk
+          cmake -S volk -B volk/build -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=OFF
+          cmake --build volk/build -j3
+          sudo cmake --install volk/build
+
+      - name: Build SDR++ core
+        run: |
+          cmake -S sdrpp -B sdrpp/build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 \
+            -DUSE_BUNDLE_DEFAULTS=ON -DCMAKE_BUILD_TYPE=Release $SDRPP_CORE_OPTS
+          cmake --build sdrpp/build --target sdrpp_core -j3
+
+      - name: Build plugin
+        run: |
+          cmake -S plugin -B plugin/build -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=Release \
+            -DSDRPP_SOURCE_DIR=$PWD/sdrpp -DSDRPP_BUILD_DIR=$PWD/sdrpp/build
+          cmake --build plugin/build -j3
+
+      - name: DSP self-test
+        run: plugin/build/rx888_tool selftest
+
+      - name: Package
+        run: |
+          printf 'rx888_mkii_source %s\nBuilt against SDR++ %s@%s (%s)\nTarget: macos_%s\nBuilt: %s\n' \
+            "$(git -C plugin describe --tags --always --dirty)" "$SDRPP_REPO" "$(git -C sdrpp rev-parse HEAD)" "$SDRPP_REF" \
+            "${{ matrix.name }}" "$(date -u)" > plugin/build/BUILD_INFO.txt
+          bash plugin/packaging/macos/make_zip.sh $PWD/sdrpp $PWD/plugin/build $PWD/rx888_mkii_source_macos_${{ matrix.name }}.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rx888_mkii_source_macos_${{ matrix.name }}
+          path: rx888_mkii_source_macos_${{ matrix.name }}.zip
+
+  linux:
+    name: ${{ matrix.distro }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [debian_bullseye, debian_bookworm, debian_trixie, debian_sid, ubuntu_focal, ubuntu_jammy, ubuntu_noble, ubuntu_resolute]
+        arch: [amd64, aarch64]
+        include:
+          - { arch: amd64, runner: ubuntu-latest }
+          - { arch: aarch64, runner: ubuntu-24.04-arm }
+          - { distro: debian_bullseye, image: 'debian:bullseye', volk: libvolk2-dev }
+          - { distro: debian_bookworm, image: 'debian:bookworm', volk: libvolk2-dev }
+          - { distro: debian_trixie, image: 'debian:trixie', volk: libvolk-dev }
+          - { distro: debian_sid, image: 'debian:sid', volk: libvolk-dev }
+          - { distro: ubuntu_focal, image: 'ubuntu:focal', volk: libvolk2-dev }
+          - { distro: ubuntu_jammy, image: 'ubuntu:jammy', volk: libvolk2-dev }
+          - { distro: ubuntu_noble, image: 'ubuntu:noble', volk: libvolk-dev }
+          - { distro: ubuntu_resolute, image: 'ubuntu:resolute', volk: libvolk-dev }
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y build-essential cmake git pkg-config libfftw3-dev libglfw3-dev ${{ matrix.volk }} \
+            libzstd-dev libusb-1.0-0-dev dpkg-dev file
+
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+          fetch-depth: 0
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.SDRPP_REPO }}
+          ref: ${{ env.SDRPP_REF }}
+          path: sdrpp
+
+      - name: Build SDR++ core
+        run: |
+          cmake -S sdrpp -B sdrpp/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr $SDRPP_CORE_OPTS
+          cmake --build sdrpp/build --target sdrpp_core -j$(nproc)
+
+      - name: Build plugin
+        run: |
+          cmake -S plugin -B plugin/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
+            -DSDRPP_SOURCE_DIR=$PWD/sdrpp -DSDRPP_BUILD_DIR=$PWD/sdrpp/build
+          cmake --build plugin/build -j$(nproc)
+          readelf -d plugin/build/rx888_mkii_source.so | grep NEEDED
+
+      - name: DSP self-test
+        run: LD_LIBRARY_PATH=$PWD/sdrpp/build/core plugin/build/rx888_tool selftest
+
+      - name: Package
+        run: |
+          git config --global --add safe.directory '*'
+          DESCRIBE=$(git -C plugin describe --tags --always --dirty)
+          case "$GITHUB_REF" in
+            refs/tags/v*) VERSION=${GITHUB_REF_NAME#v} ;;
+            *) VERSION=0.0.0+g$(git -C plugin rev-parse --short HEAD) ;;
+          esac
+          printf 'rx888_mkii_source %s\nBuilt against SDR++ %s@%s (%s)\nTarget: %s_%s\nBuilt: %s\n' \
+            "$DESCRIBE" "$SDRPP_REPO" "$(git -C sdrpp rev-parse HEAD)" "$SDRPP_REF" "${{ matrix.distro }}" "${{ matrix.arch }}" "$(date -u)" \
+            > plugin/build/BUILD_INFO.txt
+          sh plugin/packaging/linux/make_deb.sh plugin/build "$VERSION" rx888_mkii_source_${{ matrix.distro }}_${{ matrix.arch }}.deb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rx888_mkii_source_${{ matrix.distro }}_${{ matrix.arch }}
+          path: rx888_mkii_source_${{ matrix.distro }}_${{ matrix.arch }}.deb
+
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, macos, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -l dist
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes \
+            --notes "Built against SDR++ ${SDRPP_REF}; see BUILD_INFO.txt in each package for the exact SDR++ commit. Each package works with SDR++ builds from about that commit (for example the SDR++ nightly from the same days)."

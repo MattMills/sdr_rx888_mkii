@@ -42,7 +42,10 @@ void usage() {
         "          [--att 0..63] [--vga 0..126] [--rfgain 0..28] [--ifgain 0..15] [--ifvga CODE]\n"
         "          [--dither] [--rand] [--pgaoff] [--ppm X] [--raw] [--settle MS]\n"
         "                               capture raw ADC (PREFIX.s16) and/or DDC output (PREFIX.cf32)\n"
-        "  bench                        DDC throughput on synthetic data\n");
+        "  scan    [--mode vhf|hf] [--start HZ] [--stop HZ] [--step HZ] [--adc HZ] [--decim D] [--snr DB] [--csv F]\n"
+        "                               step the tuner across a range and list spectral peaks\n"
+        "  selftest                     synthetic DDC checks (frequency, level, image, threads)\n"
+        "  bench   [--threads N]        DDC throughput on synthetic data\n");
 }
 
 std::string pickDevice() {
