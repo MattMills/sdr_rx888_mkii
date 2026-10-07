@@ -1,0 +1,7 @@
+build/
+build-*/
+out/
+.vs/
+*.cf32
+*.s16
+*.wav
