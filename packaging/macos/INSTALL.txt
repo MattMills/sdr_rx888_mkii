@@ -12,8 +12,8 @@ commit as listed in BUILD_INFO.txt, e.g. the SDR++ nightly from the same days.
 3. Re-sign the modified app and clear the download quarantine:
      codesign --force --deep -s - /Applications/SDR++.app
      xattr -dr com.apple.quarantine /Applications/SDR++.app
-4. Start SDR++, open "Module Manager", pick "rx888_mkii_source", enter a name
-   (e.g. "RX888 mkII"), click "+", then select "RX888 mkII" as the source.
+4. Start SDR++ and select "RX888 mkII" as the source (the plugin adds its own
+   module instance on first start).
 
 No driver is needed on macOS. The RX888 must be on a USB 3 port for ADC clocks
 above ~20 MS/s.
