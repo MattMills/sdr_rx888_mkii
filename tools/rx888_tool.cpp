@@ -708,7 +708,7 @@ int cmdSelftest() {
     // Tunings: on a multiple-of-4 bin, odd bins, and between bins.
     const double binHz = fs / R2IQ::FFT_N;
     const double tunes[] = { 1296 * binHz, 1297 * binHz, 1299 * binHz, 1298.37 * binHz, 10.2e6 };
-    for (int decim : { 2, 4, 6 }) {
+    for (int decim : { 0, 1, 2, 4, 6 }) {
         const double outRate = fs / (2 << decim);
         for (double tune : tunes) {
             for (bool invert : { false, true }) {
@@ -738,13 +738,39 @@ int cmdSelftest() {
                     double img = -1000;
                     for (int j = km - 3; j <= km + 3; j++) { img = std::max(img, p[j]); }
                     double expectDb = 20 * log10(t.amp);
-                    bool ok = fabs(meas - off) < outRate / N * 0.15 && fabs(b - expectDb) < 1.0 && (b - img) > 80 && same;
+                    // A tone within 4 bins of DC has its mirror inside its own window main lobe.
+                    const bool imgValid = fabs(off) > 4.0 * outRate / N;
+                    bool ok = fabs(meas - off) < outRate / N * 0.15 && fabs(b - expectDb) < 1.0 && ((b - img) > 80 || !imgValid) && same;
                     if (!ok) { failures++; }
                     printf("%s decim %d tune %.3f Hz %s: tone %+.1f Hz -> %+.2f Hz (err %+.2f), %.2f dBFS (exp %.2f), image %.1f dB down, 1 vs 4 threads %s\n",
                            ok ? "PASS" : "FAIL", decim, tune, invert ? "inv" : "   ", off, meas, meas - off, b, expectDb, b - img,
                            same ? "identical" : "DIFFERENT");
                 }
             }
+        }
+    }
+    // Band edges of the wide outputs: flat to 0.92 of the output Nyquist frequency.
+    for (int decim : { 0, 1 }) {
+        const double outRate = fs / (2 << decim);
+        const double off = 0.46 * outRate;
+        for (bool invert : { false, true }) {
+            const double tune = invert ? tones[0].f + off : tones[0].f - off;
+            std::vector<R2IQ::cf> o;
+            run(decim, tune, invert, 1, o);
+            std::vector<R2IQ::cf> seg(o.begin() + 4096, o.end());
+            const int N = 1 << 16;
+            if ((int)seg.size() < N) { continue; }
+            seg.resize(N);
+            auto p = psd(seg, N);
+            int k = (int)lround(off / outRate * N) + N / 2, best = k;
+            for (int j = k - 3; j <= k + 3; j++) {
+                if (p[j] > p[best]) { best = j; }
+            }
+            const double expectDb = 20 * log10(tones[0].amp);
+            const bool ok = fabs(p[best] - expectDb) < 1.0;
+            if (!ok) { failures++; }
+            printf("%s decim %d %s: tone at %.2f of the output Nyquist frequency, %.2f dBFS (exp %.2f)\n", ok ? "PASS" : "FAIL", decim,
+                   invert ? "inv" : "   ", off / (outRate / 2), p[best], expectDb);
         }
     }
     printf("%s (%d failures)\n", failures ? "SELFTEST FAILED" : "SELFTEST PASSED", failures);

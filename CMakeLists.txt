@@ -88,6 +88,20 @@ if (UNIX AND NOT APPLE)
     install(FILES packaging/linux/99-rx888-mkii.rules DESTINATION lib/udev/rules.d)
 endif ()
 
+# ------------------------------------------------- OpenWebRX connector
+# rx888_connector speaks the owrx_connector protocol (see openwebrx/README.md).
+option(RX888_BUILD_OWRX_CONNECTOR "Build rx888_connector for OpenWebRX (needs libowrx-connector-dev, libcsdr-dev)" OFF)
+if (RX888_BUILD_OWRX_CONNECTOR)
+    if (NOT PKG_CONFIG_FOUND)
+        message(FATAL_ERROR "pkg-config is needed to find owrx-connector")
+    endif ()
+    pkg_check_modules(OWRX_CONNECTOR REQUIRED owrx-connector)
+    add_executable(rx888_connector openwebrx/rx888_connector.cpp)
+    target_include_directories(rx888_connector PRIVATE ${OWRX_CONNECTOR_INCLUDE_DIRS})
+    target_link_libraries(rx888_connector PRIVATE rx888_core ${OWRX_CONNECTOR_LINK_LIBRARIES})
+    install(TARGETS rx888_connector DESTINATION bin)
+endif ()
+
 # ------------------------------------------------------------ SDR++ module
 if (SDRPP_SOURCE_DIR)
     if (NOT SDRPP_BUILD_DIR)
