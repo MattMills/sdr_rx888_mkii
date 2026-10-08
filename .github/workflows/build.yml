@@ -35,7 +35,9 @@ env:
 jobs:
   windows:
     name: Windows x64
-    runs-on: windows-latest
+    # windows-latest became windows-2025 with Visual Studio 2026 only; the
+    # SDR++ and plugin builds below use the Visual Studio 2022 generator.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
         with:
