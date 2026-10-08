@@ -1,0 +1,33 @@
+# OpenWebRX+ with the RX888 mkII. From this directory:
+#   docker compose up -d --build
+# then open http://<host>:8073/
+services:
+  openwebrx:
+    build:
+      context: ..
+      dockerfile: openwebrx/Dockerfile
+    image: openwebrx-rx888:latest
+    container_name: openwebrx-rx888
+    restart: unless-stopped
+    ports:
+      - "8073:8073"
+    # Ahead of other containers and batch work on a shared host: CPU weight 8x
+    # the default, and SYS_NICE so the start script can renice itself (OWRX_NICE).
+    cpu_shares: 8192
+    cap_add:
+      - SYS_NICE
+    # The RX888 enumerates twice (FX3 bootloader, then the SDDC firmware) and
+    # gets a new device node each time, so pass the whole USB tree and allow
+    # every USB character device (major 189) rather than one node.
+    device_cgroup_rules:
+      - "c 189:* rmw"
+    volumes:
+      - /dev/bus/usb:/dev/bus/usb
+      - owrx-settings:/var/lib/openwebrx
+      - owrx-etc:/etc/openwebrx
+    environment:
+      - TZ=${TZ:-UTC}
+
+volumes:
+  owrx-settings:
+  owrx-etc:

@@ -1,0 +1,85 @@
+{
+    "version": 8,
+    "receiver_name": "RX888 mkII",
+    "receiver_location": "",
+    "max_clients": 6,
+    "max_clients_per_ip": 6,
+    "fft_size": 32768,
+    "sdrs": {
+        "rx888": {
+            "name": "RX888 mkII",
+            "type": "sddc",
+            "enabled": true,
+            "ppm": 9.5,
+            "rf_gain": 6,
+            "profiles": {
+                "hf-32": {
+                    "name": "0-32 MHz, all of HF (32 MS/s)",
+                    "center_freq": 16000000,
+                    "samp_rate": 32000000,
+                    "fft_size": 65536,
+                    "start_freq": 7200000,
+                    "start_mod": "lsb",
+                    "tuning_step": "500"
+                },
+                "mw": {
+                    "name": "AM broadcast (2 MS/s)",
+                    "center_freq": 1100000,
+                    "samp_rate": 2000000,
+                    "start_freq": 850000,
+                    "start_mod": "am",
+                    "tuning_step": "10000"
+                },
+                "80m": {
+                    "name": "80 m (2 MS/s)",
+                    "center_freq": 3750000,
+                    "samp_rate": 2000000,
+                    "start_freq": 3573000,
+                    "start_mod": "usb",
+                    "tuning_step": "500"
+                },
+                "40m": {
+                    "name": "40 m (1 MS/s)",
+                    "center_freq": 7150000,
+                    "samp_rate": 1000000,
+                    "start_freq": 7074000,
+                    "start_mod": "usb",
+                    "tuning_step": "500"
+                },
+                "30m-wwv": {
+                    "name": "30 m and WWV 10 MHz (1 MS/s)",
+                    "center_freq": 10200000,
+                    "samp_rate": 1000000,
+                    "start_freq": 10000000,
+                    "start_mod": "am",
+                    "tuning_step": "500"
+                },
+                "20m": {
+                    "name": "20 m (1 MS/s)",
+                    "center_freq": 14175000,
+                    "samp_rate": 1000000,
+                    "start_freq": 14074000,
+                    "start_mod": "usb",
+                    "tuning_step": "500"
+                },
+                "10m": {
+                    "name": "10 m (4 MS/s)",
+                    "center_freq": 29000000,
+                    "samp_rate": 4000000,
+                    "start_freq": 28074000,
+                    "start_mod": "usb",
+                    "tuning_step": "500"
+                },
+                "hf-64": {
+                    "name": "0-64 MHz, HF + 6 m (64 MS/s, beyond what OpenWebRX streams smoothly)",
+                    "center_freq": 32000000,
+                    "samp_rate": 64000000,
+                    "fft_size": 65536,
+                    "start_freq": 50313000,
+                    "start_mod": "usb",
+                    "tuning_step": "500"
+                }
+            }
+        }
+    }
+}

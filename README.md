@@ -251,9 +251,17 @@ Command-line utility built with the same device and DSP code:
 | `rx888_tool info` | load firmware if needed; print model, firmware version, link speed |
 | `rx888_tool stream --adc 20000000 --seconds 5 [--ddc 2]` | measure USB throughput (and DDC load) |
 | `rx888_tool capture --out x --mode hf --adc 20000000 --freq 5000000 --decim 6 --raw` | capture raw ADC (`x.s16`) and DDC output (`x.cf32`), print ADC statistics |
+| `rx888_tool record --out x.cs8 --mode vhf --freq 497e6 --seconds 120` | stream the DDC output to disk for any length (cs8, cs16 or cf32), with `x.cs8.txt` metadata |
 | `rx888_tool scan --mode vhf --start 470e6 --stop 610e6` | step the tuner across a range and list spectral peaks |
-| `rx888_tool selftest` | synthetic DDC checks (frequency, level, image, threads) |
+| `rx888_tool selftest` | synthetic DDC checks (frequency, level, image, threads, band-edge flatness) |
 | `rx888_tool bench [--threads N]` | DDC throughput |
+
+## OpenWebRX
+
+[`openwebrx/`](openwebrx/README.md) builds an OpenWebRX+ container around
+`rx888_connector`, an OpenWebRX connector made from the same device and DSP
+code. It needs no GPU, and the default profile shows all of HF (0–32 MHz)
+at once.
 
 ## How it works
 
